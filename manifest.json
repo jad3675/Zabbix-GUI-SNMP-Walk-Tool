@@ -1,0 +1,89 @@
+{
+    "manifest_version": 2.0,
+    "id": "snmp-walk",
+    "name": "SNMP Walk",
+    "version": "1.5.1",
+    "namespace": "SnmpWalk",
+    "author": "John Danhires",
+    "description": "Ad-hoc SNMP walk from the frontend, with MIB translation, table detection, snapshots, diff, template coverage and item creation.",
+    "actions": {
+        "snmpwalk.view": {
+            "class": "WalkView",
+            "view": "snmpwalk.view"
+        },
+        "snmpwalk.run": {
+            "class": "WalkRun",
+            "layout": "layout.json"
+        },
+        "snmpwalk.context": {
+            "class": "WalkContext",
+            "layout": "layout.json"
+        },
+        "snmpwalk.analyze": {
+            "class": "WalkAnalyze",
+            "layout": "layout.json"
+        },
+        "snmpwalk.snapshot.save": {
+            "class": "SnapshotSave",
+            "layout": "layout.json"
+        },
+        "snmpwalk.snapshot.list": {
+            "class": "SnapshotList",
+            "layout": "layout.json"
+        },
+        "snmpwalk.snapshot.get": {
+            "class": "SnapshotGet",
+            "layout": "layout.json"
+        },
+        "snmpwalk.snapshot.delete": {
+            "class": "SnapshotDelete",
+            "layout": "layout.json"
+        },
+        "snmpwalk.diff": {
+            "class": "WalkDiff",
+            "layout": "layout.json"
+        },
+        "snmpwalk.coverage": {
+            "class": "WalkCoverage",
+            "layout": "layout.json"
+        },
+        "snmpwalk.create": {
+            "class": "ObjectCreate",
+            "layout": "layout.json"
+        },
+        "snmpwalk.targets": {
+            "class": "TargetList",
+            "layout": "layout.json"
+        },
+        "snmpwalk.mib.view": {
+            "class": "MibView",
+            "view": "snmpwalk.mib"
+        },
+        "snmpwalk.mib.upload": {
+            "class": "MibUpload",
+            "layout": "layout.json"
+        },
+        "snmpwalk.mib.reindex": {
+            "class": "MibReindex",
+            "layout": "layout.json"
+        },
+        "snmpwalk.mib.delete": {
+            "class": "MibDelete",
+            "layout": "layout.json"
+        }
+    },
+    "config": {
+        "data_dir": "/var/lib/zabbix/snmpwalk",
+        "mib_dirs": ["/var/lib/zabbix/mibs", "/usr/share/snmp/mibs", "/usr/share/snmp/mibs/iana", "/usr/share/snmp/mibs/ietf"],
+        "snmptranslate": "snmptranslate",
+        "engine": "auto",
+        "chunk_size": 300,
+        "max_varbinds": 200000,
+        "local_timeout": 3,
+        "local_retries": 2,
+        "script_id": null,
+        "min_user_type": 2,
+        "template_limit": 300,
+        "snapshot_retention_days": 365
+    }
+}
