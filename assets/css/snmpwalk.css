@@ -1,0 +1,262 @@
+/*
+ * Console styling.
+ *
+ * Deliberately thin: the page uses Zabbix's own list-table, buttons and message
+ * classes so it inherits the active theme, including dark mode and any custom theme
+ * the installation uses. Only things Zabbix has no class for are defined here.
+ */
+
+.snmpwalk-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin: 10px 0;
+}
+
+.snmpwalk-tabs {
+	display: flex;
+	gap: 4px;
+	border-bottom: 1px solid var(--table-border-color, #dfe4e7);
+	margin-bottom: 8px;
+	padding: 0;
+	list-style: none;
+}
+
+.snmpwalk-tabs .snmpwalk-tab {
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	padding: 6px 12px;
+	cursor: pointer;
+	color: inherit;
+}
+
+.snmpwalk-tabs .snmpwalk-tab.selected {
+	border-bottom-color: var(--btn-bg-color, #0275b8);
+	font-weight: bold;
+}
+
+.snmpwalk-toolbar {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	margin-bottom: 8px;
+	flex-wrap: wrap;
+}
+
+.snmpwalk-status {
+	margin: 8px 0;
+	min-height: 1.4em;
+}
+
+.snmpwalk-status ul {
+	margin: 6px 0 0 18px;
+}
+
+.snmpwalk-status-running {
+	opacity: .7;
+}
+
+/* Monospace only where alignment carries meaning: an OID column that does not line up
+   is materially harder to scan than one that does. */
+.snmpwalk-oid,
+.snmpwalk-value {
+	font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	font-size: 11px;
+	word-break: break-all;
+}
+
+.snmpwalk-oid {
+	opacity: .65;
+}
+
+.snmpwalk-values .snmpwalk-object {
+	line-height: 1.35;
+}
+
+.snmpwalk-uncovered td:first-child {
+	box-shadow: inset 3px 0 0 var(--msg-warning-border-color, #f5b400);
+}
+
+.snmpwalk-covered td:first-child {
+	box-shadow: inset 3px 0 0 var(--msg-good-border-color, #59db8f);
+}
+
+.snmpwalk-card {
+	border: 1px solid var(--table-border-color, #dfe4e7);
+	border-radius: 2px;
+	padding: 10px 12px;
+	margin-bottom: 12px;
+}
+
+.snmpwalk-card h4 {
+	margin: 0 0 4px;
+}
+
+.snmpwalk-card-meta {
+	opacity: .7;
+	margin-bottom: 8px;
+}
+
+.snmpwalk-scroll {
+	overflow-x: auto;
+	max-height: 420px;
+	overflow-y: auto;
+}
+
+.snmpwalk-summary {
+	font-size: 1.1em;
+	margin-bottom: 10px;
+}
+
+.snmpwalk-note {
+	opacity: .75;
+	margin: 6px 0;
+	font-style: italic;
+}
+
+.snmpwalk-empty {
+	padding: 28px 0;
+	text-align: center;
+	opacity: .6;
+}
+
+.snmpwalk-diff-controls {
+	display: flex;
+	gap: 14px;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+
+.snmpwalk-diff-removed { border-left: 3px solid var(--msg-bad-border-color, #e45959); }
+.snmpwalk-diff-added { border-left: 3px solid var(--msg-good-border-color, #59db8f); }
+.snmpwalk-diff-changed { border-left: 3px solid var(--msg-warning-border-color, #f5b400); }
+.snmpwalk-diff-retyped { border-left: 3px solid var(--msg-warning-border-color, #f5b400); }
+
+.snmpwalk-before { text-decoration: line-through; opacity: .6; }
+.snmpwalk-after { font-weight: bold; }
+
+.snmpwalk-definitions {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 16px;
+	margin: 0 0 10px;
+}
+
+.snmpwalk-definitions dt { opacity: .7; }
+.snmpwalk-definitions dd { margin: 0; }
+
+.snmpwalk-reasons {
+	margin: 0 0 0 18px;
+	opacity: .8;
+}
+
+.snmpwalk-warnings {
+	max-height: 200px;
+	overflow: auto;
+	font-size: 11px;
+	white-space: pre-wrap;
+	margin-top: 8px;
+}
+
+.snmpwalk-preview {
+	min-width: 480px;
+}
+
+.snmpwalk-skipped td {
+	opacity: .55;
+	text-decoration: line-through;
+}
+
+.snmpwalk-values td:first-child {
+	white-space: nowrap;
+}
+
+
+.snmpwalk-editable input[type="text"],
+.snmpwalk-editable select {
+	font-size: 11px;
+}
+
+
+/* Dialog layout.
+   The create dialogs carry a target chooser, an option, and a five-column editable
+   grid. Without structure they collapse into a wall of controls with sentences running
+   into each other, which is what the first version looked like. */
+
+.snmpwalk-preview {
+	min-width: 720px;
+}
+
+.snmpwalk-section {
+	margin-bottom: 16px;
+}
+
+.snmpwalk-section:last-child {
+	margin-bottom: 0;
+}
+
+.snmpwalk-section-title {
+	font-weight: bold;
+	padding-bottom: 4px;
+	margin-bottom: 8px;
+	border-bottom: 1px solid var(--table-border-color, #dfe4e7);
+}
+
+.snmpwalk-choice {
+	display: flex;
+	gap: 20px;
+	margin-bottom: 10px;
+}
+
+.snmpwalk-choice label,
+.snmpwalk-checkbox {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
+}
+
+/* Label column wide enough for the longest label, so controls line up down the
+   dialog instead of stepping in and out. */
+.snmpwalk-field {
+	display: grid;
+	grid-template-columns: 140px 1fr;
+	gap: 10px;
+	align-items: baseline;
+	margin-bottom: 8px;
+}
+
+.snmpwalk-field-label {
+	text-align: right;
+	opacity: .75;
+}
+
+.snmpwalk-field-value {
+	min-width: 0;
+}
+
+.snmpwalk-field-value > select,
+.snmpwalk-field-value > input[type="text"] {
+	max-width: 420px;
+	width: 100%;
+}
+
+/* Explanatory text sits on its own line under whatever it explains, never beside a
+   label where the two run together. */
+.snmpwalk-hint {
+	opacity: .7;
+	font-style: italic;
+	margin-top: 4px;
+	line-height: 1.4;
+}
+
+.snmpwalk-preview .snmpwalk-summary {
+	font-size: 1em;
+	margin-bottom: 8px;
+}
+
+.snmpwalk-preview .snmpwalk-scroll {
+	max-height: 340px;
+}
