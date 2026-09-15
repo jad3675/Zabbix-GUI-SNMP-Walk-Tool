@@ -36,7 +36,7 @@ $auth_protocol = (new CTag('select', true))
 	->addClass('focusable');
 
 foreach (\Modules\SnmpWalk\Includes\CHostContext::AUTH_PROTOCOLS as $index => $label) {
-	$auth_protocol->addItem(new CTag('option', true, $label, ['value' => (string) $index]));
+	$auth_protocol->addItem((new CTag('option', true, $label))->setAttribute('value', (string) $index));
 }
 
 $priv_protocol = (new CTag('select', true))
@@ -44,7 +44,7 @@ $priv_protocol = (new CTag('select', true))
 	->addClass('focusable');
 
 foreach (\Modules\SnmpWalk\Includes\CHostContext::PRIV_PROTOCOLS as $index => $label) {
-	$priv_protocol->addItem(new CTag('option', true, $label, ['value' => (string) $index]));
+	$priv_protocol->addItem((new CTag('option', true, $label))->setAttribute('value', (string) $index));
 }
 
 $filter = (new CFormGrid())
@@ -118,9 +118,12 @@ $filter = (new CFormGrid())
 					(new CTag('select', true))
 						->setId('snmpwalk-cred-version')
 						->addClass('focusable')
-						->addItem(new CTag('option', true, 'SNMPv2c', ['value' => (string) SNMP_V2C]))
-						->addItem(new CTag('option', true, 'SNMPv1', ['value' => (string) SNMP_V1]))
-						->addItem(new CTag('option', true, 'SNMPv3', ['value' => (string) SNMP_V3]))
+						->addItem((new CTag('option', true, 'SNMPv2c'))
+							->setAttribute('value', (string) SNMP_V2C))
+						->addItem((new CTag('option', true, 'SNMPv1'))
+							->setAttribute('value', (string) SNMP_V1))
+						->addItem((new CTag('option', true, 'SNMPv3'))
+							->setAttribute('value', (string) SNMP_V3))
 				]))->addClass('snmpwalk-cred-row'),
 
 				(new CDiv([
@@ -144,12 +147,12 @@ $filter = (new CFormGrid())
 						(new CTag('select', true))
 							->setId('snmpwalk-cred-securitylevel')
 							->addClass('focusable')
-							->addItem(new CTag('option', true, 'authPriv',
-								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV]))
-							->addItem(new CTag('option', true, 'authNoPriv',
-								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV]))
-							->addItem(new CTag('option', true, 'noAuthNoPriv',
-								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV]))
+							->addItem((new CTag('option', true, 'authPriv'))
+								->setAttribute('value', (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV))
+							->addItem((new CTag('option', true, 'authNoPriv'))
+								->setAttribute('value', (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV))
+							->addItem((new CTag('option', true, 'noAuthNoPriv'))
+								->setAttribute('value', (string) ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV))
 					]))->addClass('snmpwalk-cred-row'),
 					(new CDiv([
 						new CLabel(_('Authentication'), 'snmpwalk-cred-authprotocol'),

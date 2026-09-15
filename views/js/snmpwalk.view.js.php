@@ -6,7 +6,7 @@
 window.snmpwalk_console = new class {
 
 	init(options) {
-		console.info('SNMP walk module build 1.6.0');
+		console.info('SNMP walk module build 1.6.1');
 		this.options = options;
 		this.rows = [];
 		this.token = null;

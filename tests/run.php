@@ -474,5 +474,30 @@ check('an unresolved macro survives scrubbing',
 		->scrub('cannot read {$SNMP_COMMUNITY}'),
 	'cannot read {$SNMP_COMMUNITY}');
 
+// ------------------------------------------------------------- source checks
+
+/**
+ * CTag's fourth constructor argument is a class name, not an attribute array. Passing
+ * ['value' => ...] there is accepted silently and the option renders without a value,
+ * so the browser posts the label text and the controller rejects it. Costs nothing to
+ * check, and the failure it catches looks like a validation bug rather than a markup
+ * one.
+ */
+$offenders = [];
+
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname(__DIR__))) as $file) {
+	if ($file->getExtension() !== 'php' || str_contains($file->getPathname(), '/tests/')) {
+		continue;
+	}
+
+	foreach (file($file->getPathname()) as $number => $line) {
+		if (preg_match('/new CTag\([^)]*,\s*\[/', $line)) {
+			$offenders[] = basename($file->getPathname()).':'.($number + 1);
+		}
+	}
+}
+
+check('no CTag is given attributes as its class argument', $offenders, []);
+
 echo "\n$passed passed, $failed failed\n";
 exit($failed === 0 ? 0 : 1);

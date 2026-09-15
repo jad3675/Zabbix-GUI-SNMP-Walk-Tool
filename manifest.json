@@ -2,7 +2,7 @@
     "manifest_version": 2.0,
     "id": "snmp-walk",
     "name": "SNMP Walk",
-    "version": "1.6.0",
+    "version": "1.6.1",
     "namespace": "SnmpWalk",
     "author": "John Danhires",
     "description": "Ad-hoc SNMP walk from the frontend, with MIB translation, table detection, snapshots, diff, template coverage and item creation.",
