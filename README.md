@@ -260,6 +260,17 @@ level: `usermacro.get` does not return them. A host whose credentials use either
 refused by the local and server engines, with the macro named, and routed to the script
 engine instead. Nothing is guessed and nothing is substituted with an empty string.
 
+Where no script engine is configured, tick *Supply credentials for this walk* and type
+them. They are used for that walk only: not saved to the host, not written into the
+snapshot, not held anywhere after the page is closed. They live in the form fields, are
+re-sent with each chunk of a resumable walk, and are cleared when the selected host
+changes. What is recorded is that a walk used supplied credentials, never the value.
+
+The same control answers "is the stored community simply wrong", which previously meant
+editing the host to find out. The script engine cannot use supplied credentials, since it
+reads its own from the poller, so selecting both is refused rather than quietly walking
+with the stored ones.
+
 Read access is gated on user type and on the *Monitoring → Hosts* UI element, so a
 read-only NOC role can be given the console without being given host configuration.
 Creating items, deleting snapshots and uploading MIBs each require more: write access

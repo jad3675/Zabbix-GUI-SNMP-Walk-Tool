@@ -31,6 +31,22 @@ foreach ($data['engines'] as $key => $engine) {
 	$engine_select->addOption($option);
 }
 
+$auth_protocol = (new CTag('select', true))
+	->setId('snmpwalk-cred-authprotocol')
+	->addClass('focusable');
+
+foreach (\Modules\SnmpWalk\Includes\CHostContext::AUTH_PROTOCOLS as $index => $label) {
+	$auth_protocol->addItem(new CTag('option', true, $label, ['value' => (string) $index]));
+}
+
+$priv_protocol = (new CTag('select', true))
+	->setId('snmpwalk-cred-privprotocol')
+	->addClass('focusable');
+
+foreach (\Modules\SnmpWalk\Includes\CHostContext::PRIV_PROTOCOLS as $index => $label) {
+	$priv_protocol->addItem(new CTag('option', true, $label, ['value' => (string) $index]));
+}
+
 $filter = (new CFormGrid())
 	->addItem([
 		(new CLabel(_('Host'), 'hostid_ms'))->setAsteriskMark(),
@@ -85,8 +101,85 @@ $filter = (new CFormGrid())
 	])
 	->addItem([
 		new CLabel(_('Credentials')),
-		new CFormField((new CDiv())->setId('snmpwalk-credentials')->addClass(ZBX_STYLE_GREY))
-	]);
+		new CFormField([
+			(new CDiv())->setId('snmpwalk-credentials')->addClass(ZBX_STYLE_GREY),
+			(new CCheckBox('cred_override'))
+				->setId('snmpwalk-cred-override')
+				->setLabel(_('Supply credentials for this walk')),
+			(new CDiv(_('Used for this walk only. Not saved to the host, not written to the snapshot, not kept after you leave the page.')))
+				->addClass(ZBX_STYLE_GREY)
+		])
+	])
+	->addItem(
+		(new CFormField(
+			(new CDiv([
+				(new CDiv([
+					new CLabel(_('Version'), 'snmpwalk-cred-version'),
+					(new CTag('select', true))
+						->setId('snmpwalk-cred-version')
+						->addClass('focusable')
+						->addItem(new CTag('option', true, 'SNMPv2c', ['value' => (string) SNMP_V2C]))
+						->addItem(new CTag('option', true, 'SNMPv1', ['value' => (string) SNMP_V1]))
+						->addItem(new CTag('option', true, 'SNMPv3', ['value' => (string) SNMP_V3]))
+				]))->addClass('snmpwalk-cred-row'),
+
+				(new CDiv([
+					new CLabel(_('Community'), 'snmpwalk-cred-community'),
+					(new CPassBox('cred_community'))
+						->setId('snmpwalk-cred-community')
+						->addStyle('width: '.ZBX_TEXTAREA_SMALL_WIDTH.'px;')
+						->setAttribute('autocomplete', 'new-password')
+				]))->setId('snmpwalk-cred-v2')->addClass('snmpwalk-cred-row'),
+
+				(new CDiv([
+					(new CDiv([
+						new CLabel(_('Security name'), 'snmpwalk-cred-securityname'),
+						(new CTextBox('cred_securityname'))
+							->setId('snmpwalk-cred-securityname')
+							->setWidth(ZBX_TEXTAREA_SMALL_WIDTH)
+							->setAttribute('autocomplete', 'off')
+					]))->addClass('snmpwalk-cred-row'),
+					(new CDiv([
+						new CLabel(_('Security level'), 'snmpwalk-cred-securitylevel'),
+						(new CTag('select', true))
+							->setId('snmpwalk-cred-securitylevel')
+							->addClass('focusable')
+							->addItem(new CTag('option', true, 'authPriv',
+								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV]))
+							->addItem(new CTag('option', true, 'authNoPriv',
+								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV]))
+							->addItem(new CTag('option', true, 'noAuthNoPriv',
+								['value' => (string) ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV]))
+					]))->addClass('snmpwalk-cred-row'),
+					(new CDiv([
+						new CLabel(_('Authentication'), 'snmpwalk-cred-authprotocol'),
+						$auth_protocol,
+						(new CPassBox('cred_authpassphrase'))
+							->setId('snmpwalk-cred-authpassphrase')
+							->addStyle('width: '.ZBX_TEXTAREA_SMALL_WIDTH.'px;')
+							->setAttribute('placeholder', _('passphrase'))
+							->setAttribute('autocomplete', 'new-password')
+					]))->setId('snmpwalk-cred-auth')->addClass('snmpwalk-cred-row'),
+					(new CDiv([
+						new CLabel(_('Privacy'), 'snmpwalk-cred-privprotocol'),
+						$priv_protocol,
+						(new CPassBox('cred_privpassphrase'))
+							->setId('snmpwalk-cred-privpassphrase')
+							->addStyle('width: '.ZBX_TEXTAREA_SMALL_WIDTH.'px;')
+							->setAttribute('placeholder', _('passphrase'))
+							->setAttribute('autocomplete', 'new-password')
+					]))->setId('snmpwalk-cred-priv')->addClass('snmpwalk-cred-row'),
+					(new CDiv([
+						new CLabel(_('Context name'), 'snmpwalk-cred-contextname'),
+						(new CTextBox('cred_contextname'))
+							->setId('snmpwalk-cred-contextname')
+							->setWidth(ZBX_TEXTAREA_SMALL_WIDTH)
+							->setAttribute('autocomplete', 'off')
+					]))->addClass('snmpwalk-cred-row')
+				]))->setId('snmpwalk-cred-v3')
+			]))->setId('snmpwalk-cred-fields')->addStyle('display: none;')
+		))->addClass('snmpwalk-cred-fields-field')
+	);
 
 $actions = (new CDiv([
 	(new CSimpleButton(_('Run walk')))->setId('snmpwalk-run')->addClass(ZBX_STYLE_BTN_ALT),

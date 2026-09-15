@@ -366,6 +366,15 @@ function context(array $details): CHostContext {
 	$context = new CHostContext();
 	$context->details = $details;
 
+	// Typed properties with no default, so redacted() needs them set even though
+	// nothing under test reads them.
+	$context->hostid = '10084';
+	$context->host = 'sw-core-01';
+	$context->name = 'sw-core-01';
+	$context->interfaceid = '1';
+	$context->address = '10.0.0.1';
+	$context->port = '161';
+
 	return $context;
 }
 
@@ -398,6 +407,64 @@ check('community is not checked on a v3 interface',
 	context(['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV,
 		'securityname' => 'zabbix', 'community' => '{$SNMP_COMMUNITY}'])->hasUnresolvedCredentials(),
 	false);
+
+// -------------------------------------------------- CHostContext credential override
+
+function overridden(array $override, array $details = ['version' => SNMP_V2C, 'community' => '{$SNMP_COMMUNITY}', 'bulk' => SNMP_BULK_ENABLED]): CHostContext {
+	$host = context($details);
+	$host->applyOverride($override);
+
+	return $host;
+}
+
+function refused(callable $body): string {
+	try {
+		$body();
+	}
+	catch (\RuntimeException $e) {
+		return 'refused';
+	}
+
+	return 'accepted';
+}
+
+$v2 = overridden(['version' => SNMP_V2C, 'community' => 'n0tpublic']);
+
+check('override replaces the community', $v2->details['community'], 'n0tpublic');
+check('override clears the unresolved macro', $v2->hasUnresolvedCredentials(), false);
+check('override is flagged', $v2->overridden, true);
+check('override keeps bulk settings', $v2->usesBulk(), true);
+check('override is reported, not the value', $v2->redacted()['community'], '(supplied)');
+
+// The point of rebuilding details rather than merging: a v2c override must not leave
+// a v3 passphrase from the interface sitting underneath it.
+$switched = overridden(['version' => SNMP_V2C, 'community' => 'public'],
+	['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV,
+		'securityname' => 'zabbix', 'authpassphrase' => 'leftover', 'privpassphrase' => 'leftover']);
+check('override drops stale v3 fields', array_key_exists('authpassphrase', $switched->details), false);
+
+check('empty community is refused',
+	refused(fn() => overridden(['version' => SNMP_V2C, 'community' => ''])), 'refused');
+check('unknown version is refused',
+	refused(fn() => overridden(['version' => 9, 'community' => 'public'])), 'refused');
+check('v3 without a security name is refused',
+	refused(fn() => overridden(['version' => SNMP_V3,
+		'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV])), 'refused');
+check('authPriv without a priv passphrase is refused',
+	refused(fn() => overridden(['version' => SNMP_V3, 'securityname' => 'zabbix',
+		'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV, 'authpassphrase' => 'a'])), 'refused');
+
+$v3 = overridden(['version' => SNMP_V3, 'securityname' => 'zabbix',
+	'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV]);
+check('noAuthNoPriv needs no passphrases', $v3->hasUnresolvedCredentials(), false);
+check('noAuthNoPriv blanks the passphrases', $v3->details['authpassphrase'], '');
+check('out of range protocol falls back to the first',
+	overridden(['version' => SNMP_V3, 'securityname' => 'zabbix',
+		'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV,
+		'authprotocol' => 99])->details['authprotocol'], 0);
+
+check('a supplied community is scrubbed from errors',
+	$v2->scrub('timeout with n0tpublic'), 'timeout with ******');
 
 check('a real community is scrubbed from errors',
 	context(['version' => SNMP_V2C, 'community' => 'n0tpublic'])->scrub('timeout with n0tpublic'),

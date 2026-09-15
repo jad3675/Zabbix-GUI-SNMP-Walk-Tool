@@ -29,7 +29,18 @@ class WalkRun extends CWalkAction {
 			'oid' => 'required|string',
 			'engine' => 'in auto,local,server,script',
 			'cursor' => 'string',
-			'token' => 'string'
+			'token' => 'string',
+			// Credentials supplied for this walk only. Never stored, never logged,
+			// never echoed back: see CHostContext::applyOverride().
+			'cred_version' => 'in 1,2,3',
+			'cred_community' => 'string',
+			'cred_securityname' => 'string',
+			'cred_securitylevel' => 'in 0,1,2',
+			'cred_authprotocol' => 'int32',
+			'cred_authpassphrase' => 'string',
+			'cred_privprotocol' => 'int32',
+			'cred_privpassphrase' => 'string',
+			'cred_contextname' => 'string'
 		]);
 	}
 
@@ -69,6 +80,21 @@ class WalkRun extends CWalkAction {
 			}
 
 			$context = CHostContext::load($this->getInput('hostid'), $this->getInput('interfaceid', ''));
+
+			if ($this->getInput('cred_version', '') !== '') {
+				$context->applyOverride([
+					'version' => $this->getInput('cred_version'),
+					'community' => $this->getInput('cred_community', ''),
+					'securityname' => $this->getInput('cred_securityname', ''),
+					'securitylevel' => $this->getInput('cred_securitylevel', '0'),
+					'authprotocol' => $this->getInput('cred_authprotocol', '0'),
+					'authpassphrase' => $this->getInput('cred_authpassphrase', ''),
+					'privprotocol' => $this->getInput('cred_privprotocol', '0'),
+					'privpassphrase' => $this->getInput('cred_privpassphrase', ''),
+					'contextname' => $this->getInput('cred_contextname', '')
+				]);
+			}
+
 			$engine = CWalkService::engine($context, $this->getInput('engine', 'auto'));
 
 			$cursor = $this->getInput('cursor', '');
@@ -88,13 +114,18 @@ class WalkRun extends CWalkAction {
 					'engine' => $engine->name(),
 					'origin' => $engine->origin(),
 					'started' => time(),
-					'user' => CWebUser::$data['username']
+					'user' => CWebUser::$data['username'],
+					// The fact, not the value. Six months later, "these numbers came
+					// from credentials somebody typed" is worth knowing about a
+					// snapshot; the credentials themselves are not written anywhere.
+					'credentials' => $context->overridden ? 'supplied' : 'interface'
 				]);
 
 				$this->log('walk', [
 					'host' => $context->name,
 					'oid' => $root,
-					'engine' => $engine->name()
+					'engine' => $engine->name(),
+					'credentials' => $context->overridden ? 'supplied' : 'interface'
 				]);
 			}
 

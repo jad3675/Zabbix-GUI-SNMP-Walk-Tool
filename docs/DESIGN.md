@@ -494,7 +494,19 @@ authenticated as nothing and timed out, with `(empty)` shown next to a host that
 had a community configured. An unexpanded macro reaching net-snmp as a literal is the
 better failure, and refusing the walk outright is better still.
 
-Only `CEngineScript` can walk such a host. Global script commands are one of the locations
+`applyOverride()` is the escape hatch for an install with no script engine. It rebuilds
+the details array from values supplied with the request rather than merging into it, so
+no stored field survives underneath: switching a v3 interface to a v2c override leaves no
+passphrase behind to be picked up by a later code path. It sets `overridden`, which makes
+`pick()` avoid the script engine and `engine()` refuse it outright, because that engine
+would silently use the poller's credentials while the console showed the typed ones.
+
+Supplied credentials are never persisted. They are not in the buffer meta, which records
+only `credentials: supplied`, and not in the log line, which records the same. The browser
+holds them in the form fields for the duration of a resumable walk and clears them when
+the host changes.
+
+Only `CEngineScript` can walk such a host without them. Global script commands are one of the locations
 where Zabbix server unmasks secret macro values, and `script.execute` takes only a
 scriptid, a hostid and manual input, so the credential never passes through PHP at all.
 

@@ -6,7 +6,7 @@
 window.snmpwalk_console = new class {
 
 	init(options) {
-		console.info('SNMP walk module build 1.5.2');
+		console.info('SNMP walk module build 1.6.0');
 		this.options = options;
 		this.rows = [];
 		this.token = null;
@@ -63,6 +63,23 @@ window.snmpwalk_console = new class {
 			.addEventListener('click', () => this.#previewSelection());
 		document.getElementById('snmpwalk-uncovered-only').addEventListener('change', () => this.#renderValues());
 
+		const override = document.getElementById('snmpwalk-cred-override');
+
+		override.addEventListener('change', () => {
+			this.#renderCredentialFields();
+
+			// Which engines can run changes with this checkbox, so the selector and
+			// its note have to be refreshed from the server rather than guessed at.
+			if (this.hostid) {
+				this.#loadContext(this.hostid);
+			}
+		});
+
+		document.getElementById('snmpwalk-cred-version')
+			.addEventListener('change', () => this.#renderCredentialFields());
+		document.getElementById('snmpwalk-cred-securitylevel')
+			.addEventListener('change', () => this.#renderCredentialFields());
+
 		document.getElementById('snmpwalk-oid').addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') {
 				e.preventDefault();
@@ -70,6 +87,7 @@ window.snmpwalk_console = new class {
 			}
 		});
 
+		this.#renderCredentialFields();
 		this.#showTab('values');
 	}
 
@@ -132,6 +150,76 @@ window.snmpwalk_console = new class {
 		return data;
 	}
 
+	// ------------------------------------------------------------ credentials
+
+	/**
+	 * Show only the fields the chosen version and security level actually use, so
+	 * there is no doubt about which of them will be sent.
+	 */
+	#renderCredentialFields() {
+		const on = document.getElementById('snmpwalk-cred-override').checked;
+		const version = document.getElementById('snmpwalk-cred-version').value;
+		const level = document.getElementById('snmpwalk-cred-securitylevel').value;
+		const v3 = version === '<?= SNMP_V3 ?>';
+
+		document.getElementById('snmpwalk-cred-fields').style.display = on ? '' : 'none';
+		document.getElementById('snmpwalk-cred-v2').style.display = v3 ? 'none' : '';
+		document.getElementById('snmpwalk-cred-v3').style.display = v3 ? '' : 'none';
+		document.getElementById('snmpwalk-cred-auth').style.display =
+			v3 && level !== '<?= ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV ?>' ? '' : 'none';
+		document.getElementById('snmpwalk-cred-priv').style.display =
+			v3 && level === '<?= ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV ?>' ? '' : 'none';
+	}
+
+	/**
+	 * The credential fields to post, or an empty object when the override is off.
+	 *
+	 * Read at the moment each chunk is sent rather than cached, so the values live in
+	 * the DOM and nowhere else. They are never put in this object's state, never
+	 * stored, and never sent with anything but a walk.
+	 */
+	#credentials() {
+		if (!document.getElementById('snmpwalk-cred-override').checked) {
+			return {};
+		}
+
+		const version = document.getElementById('snmpwalk-cred-version').value;
+		const fields = {cred_version: version};
+
+		if (version === '<?= SNMP_V3 ?>') {
+			const level = document.getElementById('snmpwalk-cred-securitylevel').value;
+
+			fields.cred_securityname = document.getElementById('snmpwalk-cred-securityname').value;
+			fields.cred_securitylevel = level;
+			fields.cred_contextname = document.getElementById('snmpwalk-cred-contextname').value;
+
+			if (level !== '<?= ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV ?>') {
+				fields.cred_authprotocol = document.getElementById('snmpwalk-cred-authprotocol').value;
+				fields.cred_authpassphrase = document.getElementById('snmpwalk-cred-authpassphrase').value;
+			}
+
+			if (level === '<?= ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV ?>') {
+				fields.cred_privprotocol = document.getElementById('snmpwalk-cred-privprotocol').value;
+				fields.cred_privpassphrase = document.getElementById('snmpwalk-cred-privpassphrase').value;
+			}
+		}
+		else {
+			fields.cred_community = document.getElementById('snmpwalk-cred-community').value;
+		}
+
+		return fields;
+	}
+
+	/**
+	 * Wipe the typed credentials. Called when the host changes, because credentials
+	 * carried silently from one device to the next is how you lock an account out.
+	 */
+	#clearCredentials() {
+		for (const id of ['community', 'securityname', 'authpassphrase', 'privpassphrase', 'contextname']) {
+			document.getElementById('snmpwalk-cred-' + id).value = '';
+		}
+	}
+
 	/**
 	 * The selected interface, or undefined when nothing is selected yet. Posting an
 	 * empty string fails validation; omitting the field lets the controller fall back
@@ -176,6 +264,10 @@ window.snmpwalk_console = new class {
 	// ---------------------------------------------------------------- context
 
 	async #loadContext(hostid) {
+		if (hostid !== this.hostid) {
+			this.#clearCredentials();
+		}
+
 		this.hostid = hostid;
 
 		const interfaces = document.getElementById('snmpwalk-interface');
@@ -190,7 +282,10 @@ window.snmpwalk_console = new class {
 		}
 
 		try {
-			const data = await this.#post('snmpwalk.context', {hostid});
+			const data = await this.#post('snmpwalk.context', {
+				hostid,
+				credentials: document.getElementById('snmpwalk-cred-override').checked ? 1 : 0
+			});
 
 			interfaces.disabled = false;
 			interfaces.innerHTML = '';
@@ -224,6 +319,28 @@ window.snmpwalk_console = new class {
 			}
 
 			credentials.textContent = bits.join(' · ');
+
+			// An unreadable community is the case the override exists for, so offer it
+			// rather than leaving the reason in the engine note and nothing to do
+			// about it. Only ever switched on automatically, never off: if it is
+			// already on, the person made that choice.
+			if (host.unresolved_macros && host.unresolved_macros.length > 0
+					&& !document.getElementById('snmpwalk-cred-override').checked) {
+				const box = document.getElementById('snmpwalk-cred-override');
+
+				box.checked = true;
+				box.dispatchEvent(new Event('change'));
+
+				document.getElementById('snmpwalk-cred-version').value = host.version === '3'
+					? '<?= SNMP_V3 ?>'
+					: (host.version === '1' ? '<?= SNMP_V1 ?>' : '<?= SNMP_V2C ?>');
+
+				if (host.version === '3' && host.security_name) {
+					document.getElementById('snmpwalk-cred-securityname').value = host.security_name;
+				}
+
+				this.#renderCredentialFields();
+			}
 
 			this.engines = data.engines;
 			this.writable = host.writable;
@@ -321,7 +438,8 @@ window.snmpwalk_console = new class {
 					oid: document.getElementById('snmpwalk-oid').value,
 					engine: document.getElementById('snmpwalk-engine').value,
 					cursor,
-					token: this.token
+					token: this.token,
+					...this.#credentials()
 				});
 
 				this.token = data.token;

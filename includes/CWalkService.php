@@ -100,6 +100,19 @@ final class CWalkService {
 				if ($unresolved !== null) {
 					throw new \RuntimeException($unresolved);
 				}
+
+				break;
+
+			case 'script':
+				// The script engine's credentials come from the script's own command
+				// line on the poller. There is no way to pass supplied ones to it, and
+				// walking with the stored community while the console shows the typed
+				// one would be the worst of both.
+				if ($host->overridden) {
+					throw new \RuntimeException(
+						_('The script engine uses the credentials in the global script on the poller, so it cannot use the ones supplied here. Choose the frontend or server engine, or clear the supplied credentials.')
+					);
+				}
 		}
 
 		switch ($engine) {
@@ -140,6 +153,17 @@ final class CWalkService {
 	 * all-in-one install, or when neither server-side path is available.
 	 */
 	private static function pick(CHostContext $host): string {
+		// Supplied credentials rule out the script engine, which reads its own from the
+		// poller. Between the two that can use them, prefer the local engine when it
+		// has a path to the device, because it is the resumable one.
+		if ($host->overridden) {
+			if ($host->proxyid === null && class_exists('SNMP')) {
+				return 'local';
+			}
+
+			return 'server';
+		}
+
 		$script = CEngineScript::diagnose((string) self::config('script_id', ''));
 
 		if ($script['usable']) {
@@ -226,8 +250,10 @@ final class CWalkService {
 			],
 			'script' => [
 				'label' => _('Zabbix server or proxy (global script)'),
-				'usable' => $script['usable'],
-				'reason' => $script['reason'],
+				'usable' => $script['usable'] && !($host !== null && $host->overridden),
+				'reason' => $host !== null && $host->overridden
+					? _('This engine takes its credentials from the global script on the poller, so it cannot use the ones supplied here.')
+					: $script['reason'],
 				'resumable' => false,
 				'script_name' => $script['name']
 			]

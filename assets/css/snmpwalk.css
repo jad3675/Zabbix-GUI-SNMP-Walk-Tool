@@ -260,3 +260,24 @@
 .snmpwalk-preview .snmpwalk-scroll {
 	max-height: 340px;
 }
+
+/* Credential override: one field per line, label above, so the SNMPv3 block does not
+   fight the filter grid for width. */
+.snmpwalk-cred-row {
+	margin-bottom: 6px;
+}
+
+.snmpwalk-cred-row label {
+	display: block;
+	margin-bottom: 2px;
+}
+
+.snmpwalk-cred-row select {
+	margin-right: 6px;
+}
+
+#snmpwalk-cred-fields {
+	margin-top: 4px;
+	padding-left: 10px;
+	border-left: 2px solid rgba(128, 128, 128, 0.35);
+}

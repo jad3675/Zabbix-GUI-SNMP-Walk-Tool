@@ -32,6 +32,13 @@ final class CHostContext {
 	public ?string $proxy_name = null;
 	public bool $writable = false;
 
+	/** True when the credentials came from the console rather than the interface. */
+	public bool $overridden = false;
+
+	/** Protocol names indexed the way Zabbix stores them in interface details. */
+	public const AUTH_PROTOCOLS = ['MD5', 'SHA1', 'SHA224', 'SHA256', 'SHA384', 'SHA512'];
+	public const PRIV_PROTOCOLS = ['DES', 'AES128', 'AES192', 'AES256', 'AES192C', 'AES256C'];
+
 	private array $macros = [];
 
 	/**
@@ -155,6 +162,106 @@ final class CHostContext {
 	}
 
 	/**
+	 * Replace the interface credentials with ones supplied for this walk only.
+	 *
+	 * The case this exists for is a host whose community lives in a Secret text or
+	 * Vault macro and an install with no usable script engine: the value cannot be
+	 * read here and there is nowhere else to get it, so the person at the keyboard
+	 * types it. It is also the quickest way to answer "is the stored community simply
+	 * wrong", which is a question the console could not previously ask.
+	 *
+	 * Nothing supplied here is written anywhere. It lives in this object for the
+	 * duration of one request, goes to the device, and is gone. The browser holds it
+	 * in memory to repeat it on each chunk of a resumable walk, which is why the
+	 * console clears it when the host changes.
+	 *
+	 * The whole details array is rebuilt rather than merged, so nothing from the
+	 * interface survives underneath the override and there is no combination of
+	 * stored and typed credentials to reason about later.
+	 *
+	 * @throws \RuntimeException on anything that is not a complete, usable credential.
+	 */
+	public function applyOverride(array $override): void {
+		$version = (int) ($override['version'] ?? 0);
+
+		if (!in_array($version, [SNMP_V1, SNMP_V2C, SNMP_V3], true)) {
+			throw new \RuntimeException(_('Select an SNMP version for the supplied credentials.'));
+		}
+
+		// Carried over because they describe how to talk to the device rather than
+		// who is talking: overriding a community should not silently turn bulk off.
+		$details = [
+			'version' => $version,
+			'bulk' => $this->details['bulk'] ?? SNMP_BULK_ENABLED,
+			'max_repetitions' => $this->details['max_repetitions'] ?? 10
+		];
+
+		if ($version == SNMP_V3) {
+			$level = (int) ($override['securitylevel'] ?? ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV);
+
+			if (!in_array($level, [ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV,
+					ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV, ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV], true)) {
+				throw new \RuntimeException(_('Invalid SNMPv3 security level.'));
+			}
+
+			$securityname = trim((string) ($override['securityname'] ?? ''));
+
+			if ($securityname === '') {
+				throw new \RuntimeException(_('Supply the SNMPv3 security name.'));
+			}
+
+			$details['securityname'] = $securityname;
+			$details['securitylevel'] = $level;
+			$details['contextname'] = (string) ($override['contextname'] ?? '');
+			$details['authprotocol'] = self::protocolIndex($override['authprotocol'] ?? 0,
+				count(self::AUTH_PROTOCOLS)
+			);
+			$details['authpassphrase'] = '';
+			$details['privprotocol'] = self::protocolIndex($override['privprotocol'] ?? 0,
+				count(self::PRIV_PROTOCOLS)
+			);
+			$details['privpassphrase'] = '';
+
+			if ($level != ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV) {
+				$details['authpassphrase'] = (string) ($override['authpassphrase'] ?? '');
+
+				if ($details['authpassphrase'] === '') {
+					throw new \RuntimeException(_('Supply the SNMPv3 authentication passphrase, or select security level noAuthNoPriv.'));
+				}
+			}
+
+			if ($level == ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV) {
+				$details['privpassphrase'] = (string) ($override['privpassphrase'] ?? '');
+
+				if ($details['privpassphrase'] === '') {
+					throw new \RuntimeException(_('Supply the SNMPv3 privacy passphrase, or select security level authNoPriv.'));
+				}
+			}
+		}
+		else {
+			$community = (string) ($override['community'] ?? '');
+
+			// Not trimmed. A community string with a trailing space is a bad idea and
+			// also somebody's production reality, and quietly changing what was typed
+			// would make this tool lie about what it sent.
+			if ($community === '') {
+				throw new \RuntimeException(_('Supply the community string.'));
+			}
+
+			$details['community'] = $community;
+		}
+
+		$this->details = $details;
+		$this->overridden = true;
+	}
+
+	private static function protocolIndex($value, int $count): int {
+		$index = (int) $value;
+
+		return $index >= 0 && $index < $count ? $index : 0;
+	}
+
+	/**
 	 * Macro references still sitting in the credential fields after resolution.
 	 *
 	 * Returned as macro names, ready to drop into a message. A non-empty result means
@@ -223,7 +330,8 @@ final class CHostContext {
 			// Naming the macros is the whole point: '(empty)' against a host that
 			// plainly has a community configured is how this looked before, and it
 			// sent people looking at the device.
-			'unresolved_macros' => $unresolved
+			'unresolved_macros' => $unresolved,
+			'overridden' => $this->overridden
 		];
 
 		if ($version == SNMP_V3) {
@@ -232,6 +340,9 @@ final class CHostContext {
 				(int) ($this->details['securitylevel'] ?? 0)
 			] ?? 'noAuthNoPriv';
 			$out['context_name'] = $this->details['contextname'] ?? '';
+		}
+		elseif ($this->overridden) {
+			$out['community'] = '(supplied)';
 		}
 		elseif ($unresolved) {
 			$out['community'] = '(unresolved macro)';
