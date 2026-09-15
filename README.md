@@ -199,7 +199,9 @@ large walk is noticeably slower than a bulk walk would be. On a LAN it does not 
 resolution and SNMPv3 handling with no new credential path and no new firewall hole.
 It returns the whole subtree in one response, so there is no progress bar.
 
-`script` is what to standardise on for proxied customer estates. See
+`script` is what to standardise on for proxied customer estates. It is also the only
+engine that works against a host whose credentials are held in Secret text or Vault
+macros, because Zabbix server expands macros in a global script's command itself. See
 `contrib/global-script.md`.
 
 `auto` prefers script, then server, then local. The walk should originate from whatever
@@ -251,9 +253,12 @@ should not trust its caller.
 
 Community strings and SNMPv3 passphrases are resolved server-side and never sent to the
 browser. Error text from net-snmp and from the Zabbix server is scrubbed before display,
-because both like to echo the community string back in failure messages. Vault macros
-are not readable from the frontend and are refused with an explanation rather than
-being used as a literal string.
+because both like to echo the community string back in failure messages.
+
+Secret text and Vault macro values are not readable from the frontend at any permission
+level: `usermacro.get` does not return them. A host whose credentials use either is
+refused by the local and server engines, with the macro named, and routed to the script
+engine instead. Nothing is guessed and nothing is substituted with an empty string.
 
 Read access is gated on user type and on the *Monitoring → Hosts* UI element, so a
 read-only NOC role can be given the console without being given host configuration.

@@ -12,6 +12,12 @@ use API;
  * user macros ({$SNMP_COMMUNITY} and friends). Those are resolved here, once, so the
  * engines never deal with macros. Nothing that comes out of here is ever echoed back
  * to the browser: see redacted().
+ *
+ * Resolution stops at the API's boundary. Secret text and Vault macro values are never
+ * returned by usermacro.get, by design, so they cannot be resolved here at any
+ * permission level. Those references are left intact and reported by
+ * unresolvedCredentials(); the script engine is the only one that can walk such a host,
+ * because Zabbix server expands macros in a global script's command itself.
  */
 final class CHostContext {
 
@@ -149,12 +155,63 @@ final class CHostContext {
 	}
 
 	/**
+	 * Macro references still sitting in the credential fields after resolution.
+	 *
+	 * Returned as macro names, ready to drop into a message. A non-empty result means
+	 * the value is Secret text, a Vault secret, or a macro that does not exist: in
+	 * every one of those cases the frontend has no way to learn the real value, and
+	 * only the Zabbix server can run this walk.
+	 *
+	 * Only the fields the configured SNMP version actually uses are examined, the same
+	 * set CEngineServer sends, so a v3 host at noAuthNoPriv is not failed over
+	 * passphrase macros nothing is going to read.
+	 *
+	 * @return string[]
+	 */
+	public function unresolvedCredentials(): array {
+		if ($this->version() == SNMP_V3) {
+			$fields = ['securityname', 'contextname'];
+			$level = (int) ($this->details['securitylevel'] ?? ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV);
+
+			if ($level != ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV) {
+				$fields[] = 'authpassphrase';
+			}
+
+			if ($level == ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV) {
+				$fields[] = 'privpassphrase';
+			}
+		}
+		else {
+			$fields = ['community'];
+		}
+
+		$unresolved = [];
+
+		foreach ($fields as $field) {
+			$value = (string) ($this->details[$field] ?? '');
+
+			if (preg_match_all('/\{\$[A-Z0-9._]+(?::.+?)?\}/', $value, $matches)) {
+				foreach ($matches[0] as $macro) {
+					$unresolved[$macro] = true;
+				}
+			}
+		}
+
+		return array_keys($unresolved);
+	}
+
+	public function hasUnresolvedCredentials(): bool {
+		return $this->unresolvedCredentials() !== [];
+	}
+
+	/**
 	 * A description of the credentials safe to show in the UI. Nothing secret leaves
 	 * the server: the community string and both passphrases are replaced, not masked
 	 * character by character, so their length does not leak either.
 	 */
 	public function redacted(): array {
 		$version = $this->version();
+		$unresolved = $this->unresolvedCredentials();
 
 		$out = [
 			'host' => $this->name,
@@ -162,7 +219,11 @@ final class CHostContext {
 			'port' => $this->port,
 			'version' => $version == SNMP_V3 ? '3' : ($version == SNMP_V1 ? '1' : '2c'),
 			'proxy' => $this->proxy_name,
-			'writable' => $this->writable
+			'writable' => $this->writable,
+			// Naming the macros is the whole point: '(empty)' against a host that
+			// plainly has a community configured is how this looked before, and it
+			// sent people looking at the device.
+			'unresolved_macros' => $unresolved
 		];
 
 		if ($version == SNMP_V3) {
@@ -172,8 +233,11 @@ final class CHostContext {
 			] ?? 'noAuthNoPriv';
 			$out['context_name'] = $this->details['contextname'] ?? '';
 		}
+		elseif ($unresolved) {
+			$out['community'] = '(unresolved macro)';
+		}
 		else {
-			$out['community'] = $this->details['community'] === '' ? '(empty)' : '(set)';
+			$out['community'] = ($this->details['community'] ?? '') === '' ? '(empty)' : '(set)';
 		}
 
 		return $out;
@@ -187,6 +251,12 @@ final class CHostContext {
 	public function scrub(string $text): string {
 		foreach (['community', 'authpassphrase', 'privpassphrase'] as $field) {
 			$secret = (string) ($this->details[$field] ?? '');
+
+			// An unexpanded macro is not a secret, and blanking it out of the error
+			// message would hide the one thing that explains the failure.
+			if (str_contains($secret, '{$')) {
+				continue;
+			}
 
 			if (strlen($secret) > 2) {
 				$text = str_replace($secret, '******', $text);
@@ -205,9 +275,10 @@ final class CHostContext {
 	}
 
 	/**
-	 * Expand {$MACRO} and {$MACRO:context} references. Secret-vault macros cannot be
-	 * read through the API, so they are left as-is and the engine will fail with a
-	 * clear message rather than silently authenticating as the literal string.
+	 * Expand {$MACRO} and {$MACRO:context} references. Secret text and Vault macros
+	 * cannot be read through the API, so they are left as-is and the walk is refused
+	 * with a clear message rather than authenticating as the literal string or, worse,
+	 * as nothing at all.
 	 */
 	private function expand(string $value): string {
 		if (!str_contains($value, '{$')) {
@@ -219,20 +290,37 @@ final class CHostContext {
 		}, $value);
 	}
 
+	/**
+	 * The macro values the frontend is actually allowed to see.
+	 *
+	 * Only plain text macros qualify. Vault macros are resolved by the server, and
+	 * usermacro.get omits the value field entirely for Secret text, so an earlier
+	 * version of this method mapped {$SNMP_COMMUNITY} to '' and walked with an empty
+	 * community: a timeout, with nothing in it to suggest why. Leaving both kinds out
+	 * of the map means the reference survives into details unexpanded, where
+	 * unresolvedCredentials() can name it.
+	 *
+	 * A macro that is unreadable at a higher precedence must also remove a readable
+	 * value inherited from below it, or a host-level Secret text macro would fall
+	 * through to whatever plain text value the template had.
+	 */
 	private static function macroMap(array $host): array {
 		$map = [];
 
 		foreach (API::UserMacro()->get(['globalmacro' => true, 'output' => ['macro', 'value', 'type']]) as $macro) {
-			if ((int) $macro['type'] !== ZBX_MACRO_TYPE_VAULT) {
-				$map[$macro['macro']] = $macro['value'];
+			if ((int) ($macro['type'] ?? ZBX_MACRO_TYPE_TEXT) === ZBX_MACRO_TYPE_TEXT) {
+				$map[$macro['macro']] = (string) ($macro['value'] ?? '');
 			}
 		}
 
 		// Inherited (template) macros are overridden by host macros, so apply them first.
 		foreach (['inheritedMacros', 'macros'] as $source) {
 			foreach ($host[$source] ?? [] as $macro) {
-				if ((int) ($macro['type'] ?? 0) !== ZBX_MACRO_TYPE_VAULT) {
+				if ((int) ($macro['type'] ?? ZBX_MACRO_TYPE_TEXT) === ZBX_MACRO_TYPE_TEXT) {
 					$map[$macro['macro']] = (string) ($macro['value'] ?? '');
+				}
+				else {
+					unset($map[$macro['macro']]);
 				}
 			}
 		}

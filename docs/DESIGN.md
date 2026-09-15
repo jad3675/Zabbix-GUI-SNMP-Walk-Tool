@@ -151,8 +151,8 @@ strings that are not valid UTF-8, or contain control characters, are rendered as
 type mapping depends on that distinction.
 
 **SNMPv3** maps Zabbix's integer protocol fields onto net-snmp's names via ordered
-arrays. A macro that failed to resolve is refused with an explanation rather than being
-used as a literal passphrase.
+arrays. A macro that failed to resolve is refused before the engine is built, by
+`CWalkService::engine()`, rather than being used as a literal passphrase.
 
 ### 4.3 CEngineServer (item.test)
 
@@ -479,9 +479,24 @@ Resolved server-side from interface details with user macros expanded (global, t
 inherited, then host). Never sent to the browser: `redacted()` reports `(set)` or
 `(empty)` rather than a masked string, so the length does not leak either.
 
-Vault macros are not readable through the API. They are refused with an explanation rather
-than being used as the literal macro text, which would otherwise authenticate as the
-string `{$SNMP_COMMUNITY}`.
+Secret text and Vault macro values are not readable through the API, for anyone. Vault
+values live outside the database entirely; `usermacro.get` omits the `value` field for
+Secret text. Neither can be resolved by the frontend at any permission level.
+
+`macroMap()` therefore admits only `ZBX_MACRO_TYPE_TEXT`, and a non-text macro at a higher
+precedence removes any readable value inherited from below it. Anything left unexpanded is
+reported by `unresolvedCredentials()`, and `CWalkService` refuses the local and server
+engines with the macro named rather than letting them run.
+
+Filtering on Vault alone was the original bug. Secret text passed the filter, and because
+the API omits the value, `{$SNMP_COMMUNITY}` expanded to an empty string: the walk
+authenticated as nothing and timed out, with `(empty)` shown next to a host that plainly
+had a community configured. An unexpanded macro reaching net-snmp as a literal is the
+better failure, and refusing the walk outright is better still.
+
+Only `CEngineScript` can walk such a host. Global script commands are one of the locations
+where Zabbix server unmasks secret macro values, and `script.execute` takes only a
+scriptid, a hostid and manual input, so the credential never passes through PHP at all.
 
 `scrub()` is applied to engine error text before display, because net-snmp and the Zabbix
 server both echo the community string back in failure messages.

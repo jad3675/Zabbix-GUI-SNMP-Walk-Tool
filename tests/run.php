@@ -2,6 +2,7 @@
 
 require_once __DIR__.'/stubs.php';
 
+use Modules\SnmpWalk\Includes\CHostContext;
 use Modules\SnmpWalk\Includes\COid;
 use Modules\SnmpWalk\Includes\CTableAnalyzer;
 use Modules\SnmpWalk\Includes\CTypeMapper;
@@ -322,6 +323,89 @@ check('a colon forces quoting', str_contains($lld, 'name: IF-MIB::ifOperStatus')
 check('rule has no value type', str_contains($lld, 'value_type: UNSIGNED')
 	&& !str_contains(substr($lld, strpos($lld, 'discovery_rules:'),
 		strpos($lld, 'item_prototypes:') - strpos($lld, 'discovery_rules:')), 'value_type'), true);
+
+// ------------------------------------------------------- CHostContext macros
+
+/**
+ * macroMap() is private because nothing outside the class has any business calling
+ * it, but it is also where a Secret text macro turns into an empty community string,
+ * which is worth a test of its own rather than one inferred from a walk that failed.
+ */
+function macro_map(array $global, array $inherited, array $host): array {
+	API::$global_macros = $global;
+
+	$method = new ReflectionMethod(CHostContext::class, 'macroMap');
+	$method->setAccessible(true);
+
+	return $method->invoke(null, ['inheritedMacros' => $inherited, 'macros' => $host]);
+}
+
+$text = ['macro' => '{$SNMP_COMMUNITY}', 'value' => 'public', 'type' => ZBX_MACRO_TYPE_TEXT];
+// usermacro.get omits value entirely for Secret text. That omission is the bug.
+$secret = ['macro' => '{$SNMP_COMMUNITY}', 'type' => ZBX_MACRO_TYPE_SECRET];
+$vault = ['macro' => '{$SNMP_COMMUNITY}', 'value' => 'secret/zabbix:community',
+	'type' => ZBX_MACRO_TYPE_VAULT];
+
+check('text macro is readable', macro_map([], [], [$text]), ['{$SNMP_COMMUNITY}' => 'public']);
+check('secret text macro is not readable', macro_map([], [], [$secret]), []);
+check('vault macro is not readable', macro_map([], [], [$vault]), []);
+check('global text macro is readable', macro_map([$text], [], []), ['{$SNMP_COMMUNITY}' => 'public']);
+check('host secret overrides inherited text', macro_map([], [$text], [$secret]), []);
+check('host secret overrides global text', macro_map([$text], [], [$secret]), []);
+check('host text overrides inherited text',
+	macro_map([], [$text], [['macro' => '{$SNMP_COMMUNITY}', 'value' => 'private',
+		'type' => ZBX_MACRO_TYPE_TEXT]]),
+	['{$SNMP_COMMUNITY}' => 'private']
+);
+
+API::$global_macros = [];
+
+// -------------------------------------------- CHostContext unresolved credentials
+
+function context(array $details): CHostContext {
+	$context = new CHostContext();
+	$context->details = $details;
+
+	return $context;
+}
+
+check('resolved community is not flagged',
+	context(['version' => SNMP_V2C, 'community' => 'public'])->unresolvedCredentials(), []);
+check('unresolved community is flagged',
+	context(['version' => SNMP_V2C, 'community' => '{$SNMP_COMMUNITY}'])->unresolvedCredentials(),
+	['{$SNMP_COMMUNITY}']);
+check('empty community is not a macro',
+	context(['version' => SNMP_V2C, 'community' => ''])->hasUnresolvedCredentials(), false);
+check('macro with context is flagged',
+	context(['version' => SNMP_V2C, 'community' => '{$SNMP_COMMUNITY:"eth0"}'])->hasUnresolvedCredentials(),
+	true);
+check('v3 passphrases are flagged at authPriv',
+	context(['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV,
+		'securityname' => 'zabbix', 'authpassphrase' => '{$SNMP_AUTHPASS}',
+		'privpassphrase' => '{$SNMP_PRIVPASS}'])->unresolvedCredentials(),
+	['{$SNMP_AUTHPASS}', '{$SNMP_PRIVPASS}']);
+check('v3 passphrases are ignored at noAuthNoPriv',
+	context(['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV,
+		'securityname' => 'zabbix', 'authpassphrase' => '{$SNMP_AUTHPASS}',
+		'privpassphrase' => '{$SNMP_PRIVPASS}'])->hasUnresolvedCredentials(),
+	false);
+check('v3 priv passphrase is ignored at authNoPriv',
+	context(['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV,
+		'securityname' => 'zabbix', 'authpassphrase' => 'authpass',
+		'privpassphrase' => '{$SNMP_PRIVPASS}'])->hasUnresolvedCredentials(),
+	false);
+check('community is not checked on a v3 interface',
+	context(['version' => SNMP_V3, 'securitylevel' => ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV,
+		'securityname' => 'zabbix', 'community' => '{$SNMP_COMMUNITY}'])->hasUnresolvedCredentials(),
+	false);
+
+check('a real community is scrubbed from errors',
+	context(['version' => SNMP_V2C, 'community' => 'n0tpublic'])->scrub('timeout with n0tpublic'),
+	'timeout with ******');
+check('an unresolved macro survives scrubbing',
+	context(['version' => SNMP_V2C, 'community' => '{$SNMP_COMMUNITY}'])
+		->scrub('cannot read {$SNMP_COMMUNITY}'),
+	'cannot read {$SNMP_COMMUNITY}');
 
 echo "\n$passed passed, $failed failed\n";
 exit($failed === 0 ? 0 : 1);

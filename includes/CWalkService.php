@@ -94,6 +94,16 @@ final class CWalkService {
 
 		switch ($engine) {
 			case 'local':
+			case 'server':
+				$unresolved = self::unresolvedReason($host);
+
+				if ($unresolved !== null) {
+					throw new \RuntimeException($unresolved);
+				}
+		}
+
+		switch ($engine) {
+			case 'local':
 				if ($host->proxyid !== null) {
 					throw new \RuntimeException(_s('%1$s is monitored by proxy %2$s, so the frontend probably cannot reach it. Use the server or script engine.',
 						$host->name, (string) $host->proxy_name
@@ -136,6 +146,13 @@ final class CWalkService {
 			return 'script';
 		}
 
+		// Neither remaining engine can read these credentials. Pick the one whose
+		// refusal names the macro instead of the one that would sit on a socket until
+		// it times out.
+		if ($host->hasUnresolvedCredentials()) {
+			return 'server';
+		}
+
 		if (CEngineServer::diagnose()['usable']) {
 			return 'server';
 		}
@@ -148,6 +165,25 @@ final class CWalkService {
 	}
 
 	/**
+	 * Why the frontend-resolved engines cannot run against this host, or null.
+	 *
+	 * Both the local and server engines are handed credentials that CHostContext has
+	 * already expanded. When the values behind them are Secret text or Vault secrets,
+	 * there is nothing to expand: usermacro.get does not return those values to any
+	 * user. Only the script engine works, because the server resolves the macro in the
+	 * script's command line itself.
+	 */
+	private static function unresolvedReason(?CHostContext $host): ?string {
+		if ($host === null || !$host->hasUnresolvedCredentials()) {
+			return null;
+		}
+
+		return _s('The SNMP credentials for this host use %1$s, which the frontend cannot read. Secret text and Vault macro values are resolved by Zabbix server only, so this host can only be walked with the script engine.',
+			implode(', ', $host->unresolvedCredentials())
+		);
+	}
+
+	/**
 	 * What each engine can do right now, for the console's engine selector. Showing
 	 * this up front is the difference between "the walk failed" and "the walk failed
 	 * because php-snmp is not installed".
@@ -156,12 +192,15 @@ final class CWalkService {
 		$server = CEngineServer::diagnose();
 		$script = CEngineScript::diagnose((string) self::config('script_id', ''));
 
-		$local_reason = null;
+		// Unreadable credentials come first: whether php-snmp is installed does not
+		// matter when there is no community string to hand it.
+		$unresolved = self::unresolvedReason($host);
+		$local_reason = $unresolved;
 
-		if (!class_exists('SNMP')) {
+		if ($local_reason === null && !class_exists('SNMP')) {
 			$local_reason = _('The php-snmp extension is not installed on the frontend host. Install php-snmp and restart PHP-FPM to enable this engine.');
 		}
-		elseif ($host !== null && $host->proxyid !== null) {
+		elseif ($local_reason === null && $host !== null && $host->proxyid !== null) {
 			$local_reason = _s('Host is monitored by proxy %1$s; the frontend has no path to it.',
 				(string) $host->proxy_name
 			);
@@ -179,8 +218,10 @@ final class CWalkService {
 			],
 			'server' => [
 				'label' => _('Zabbix server or proxy (item test)'),
-				'usable' => $server['usable'],
-				'reason' => $server['reason'],
+				// The item test payload carries the credentials the frontend resolved,
+				// so this engine is no better off than the local one here.
+				'usable' => $server['usable'] && $unresolved === null,
+				'reason' => $unresolved ?? $server['reason'],
 				'resumable' => false
 			],
 			'script' => [

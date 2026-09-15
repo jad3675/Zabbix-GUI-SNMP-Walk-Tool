@@ -6,7 +6,7 @@
 window.snmpwalk_console = new class {
 
 	init(options) {
-		console.info('SNMP walk module build 1.5.1');
+		console.info('SNMP walk module build 1.5.2');
 		this.options = options;
 		this.rows = [];
 		this.token = null;
@@ -215,6 +215,12 @@ window.snmpwalk_console = new class {
 
 			if (host.proxy) {
 				bits.push(<?= json_encode(_('via proxy')) ?> + ' ' + host.proxy);
+			}
+
+			// A v3 host shows no credential field above, so without this the only
+			// symptom of an unreadable macro would be the engine note.
+			if (host.unresolved_macros && host.unresolved_macros.length > 0) {
+				bits.push(<?= json_encode(_('unresolved')) ?> + ' ' + host.unresolved_macros.join(', '));
 			}
 
 			credentials.textContent = bits.join(' · ');

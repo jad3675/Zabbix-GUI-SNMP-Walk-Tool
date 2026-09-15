@@ -51,6 +51,35 @@ Set *Host group* on the script to restrict which hosts it can be run against, an
 *User group* to restrict who can run it. The module checks its own permissions, but
 these are the ones Zabbix enforces, so set both.
 
+The macro references in the command above must stay literal. Zabbix server resolves them
+when it runs the script, which is the entire reason this engine can reach credentials the
+frontend cannot. Do not substitute real values into the command field.
+
+## Secret text and Vault macros
+
+Global script commands are one of the locations where Zabbix server unmasks secret macro
+values, so `{$SNMP_COMMUNITY}` resolves here even when the macro is Secret text or a Vault
+secret. The frontend cannot read either (`usermacro.get` does not return those values to
+anyone), which makes this engine mandatory rather than optional for those hosts: the local
+and server engines are refused for them, with the macro named in the message.
+
+The flip side is worth stating plainly. Anyone who can edit this script can replace the
+command with `echo '{$SNMP_COMMUNITY}'` and read the value off the screen. That is true of
+any global script and is why *User group* above is not optional. Restrict script editing
+to the people who would already be told the community string.
+
+## If the script never runs
+
+Two server settings can block execution regardless of how the script is configured:
+
+* `EnableGlobalScripts` in `zabbix_server.conf` controls execution on the server. For new
+  installations since 7.0 it defaults to disabled. Set it to `1` and restart the server.
+* `EnableRemoteCommands` in `zabbix_proxy.conf` controls execution on a proxy, and is off
+  by default. Set it on every proxy that owns SNMP hosts.
+
+`diagnose()` cannot see either flag, so a script that passes the module's own checks can
+still fail at execution with a permission error from the server. Check these two first.
+
 ## 3. Point the module at it
 
 Note the script's ID from the URL on the script edit form, then put it in

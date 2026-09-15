@@ -51,3 +51,45 @@ define('DATE_TIME_FORMAT', 'Y-m-d H:i');
 
 require_once __DIR__.'/../includes/CYaml.php';
 require_once __DIR__.'/../includes/CTemplateExport.php';
+
+define('SNMP_V1', 1);
+define('SNMP_V2C', 2);
+define('SNMP_V3', 3);
+define('SNMP_BULK_ENABLED', 1);
+define('INTERFACE_TYPE_SNMP', 2);
+define('INTERFACE_USE_IP', 1);
+define('INTERFACE_PRIMARY', 1);
+define('ITEM_SNMPV3_SECURITYLEVEL_NOAUTHNOPRIV', 0);
+define('ITEM_SNMPV3_SECURITYLEVEL_AUTHNOPRIV', 1);
+define('ITEM_SNMPV3_SECURITYLEVEL_AUTHPRIV', 2);
+define('ZBX_MACRO_TYPE_TEXT', 0);
+define('ZBX_MACRO_TYPE_SECRET', 1);
+define('ZBX_MACRO_TYPE_VAULT', 2);
+
+/**
+ * Just enough of the API facade for CHostContext's macro handling. Only
+ * UserMacro()->get() is reachable from the parts under test; anything else throws
+ * rather than quietly returning an empty array, so a test that wanders into the real
+ * API surface fails loudly instead of passing for the wrong reason.
+ */
+if (!class_exists('API')) {
+	class API {
+
+		/** Global macros the stubbed usermacro.get returns. */
+		public static array $global_macros = [];
+
+		public static function UserMacro(): object {
+			return new class {
+				public function get(array $options): array {
+					return API::$global_macros;
+				}
+			};
+		}
+
+		public static function __callStatic(string $name, array $arguments) {
+			throw new \RuntimeException('unstubbed API call: '.$name);
+		}
+	}
+}
+
+require_once __DIR__.'/../includes/CHostContext.php';
