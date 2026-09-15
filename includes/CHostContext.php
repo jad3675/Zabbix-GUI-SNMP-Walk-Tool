@@ -35,6 +35,16 @@ final class CHostContext {
 	/** True when the credentials came from the console rather than the interface. */
 	public bool $overridden = false;
 
+	/**
+	 * Per-walk item timeout, or null to use the global SNMP timeout. A walk asks a
+	 * device to do far more work than a single collection does, so the timeout that
+	 * suits ordinary polling is often too tight here.
+	 */
+	public ?string $timeout = null;
+
+	/** True when any transport setting came from the console. */
+	public bool $transport_overridden = false;
+
 	/** Protocol names indexed the way Zabbix stores them in interface details. */
 	public const AUTH_PROTOCOLS = ['MD5', 'SHA1', 'SHA224', 'SHA256', 'SHA384', 'SHA512'];
 	public const PRIV_PROTOCOLS = ['DES', 'AES128', 'AES192', 'AES256', 'AES192C', 'AES256C'];
@@ -255,6 +265,71 @@ final class CHostContext {
 		$this->overridden = true;
 	}
 
+	/**
+	 * Override how the request is made, as opposed to who is making it.
+	 *
+	 * Combined requests and max repetitions live in the interface, so tuning them
+	 * previously meant editing host configuration, walking, and editing it back. That
+	 * is a bad loop to be in while characterising an unfamiliar device, and worse when
+	 * the host belongs to a customer whose configuration you would rather not touch to
+	 * answer a question. Nothing here is written back to the interface.
+	 *
+	 * Absent keys leave the interface value alone, so the console can send only what
+	 * the operator actually changed.
+	 *
+	 * @throws \RuntimeException on a value the server would reject anyway.
+	 */
+	public function applyTransport(array $override): void {
+		if (array_key_exists('bulk', $override) && $override['bulk'] !== '') {
+			$this->details['bulk'] = (int) $override['bulk'] === 0
+				? SNMP_BULK_DISABLED
+				: SNMP_BULK_ENABLED;
+			$this->transport_overridden = true;
+		}
+
+		if (array_key_exists('max_repetitions', $override) && $override['max_repetitions'] !== '') {
+			$repetitions = (int) $override['max_repetitions'];
+
+			// The upper bound is where responses start fragmenting on a normal MTU
+			// rather than anything Zabbix enforces. A device that needs more than this
+			// wants a narrower subtree, not a bigger PDU.
+			if ($repetitions < 1 || $repetitions > 250) {
+				throw new \RuntimeException(_('Max repetitions must be between 1 and 250.'));
+			}
+
+			$this->details['max_repetitions'] = $repetitions;
+			$this->transport_overridden = true;
+		}
+
+		if (array_key_exists('timeout', $override) && $override['timeout'] !== '') {
+			$this->timeout = self::normalizeTimeout((string) $override['timeout']);
+			$this->transport_overridden = true;
+		}
+	}
+
+	/**
+	 * Accept 30, 30s or 1m and return what the server will take.
+	 *
+	 * The server answers an out-of-range item timeout with "Unsupported timeout value"
+	 * and nothing else, so the range is checked here where the message can say which
+	 * field was wrong.
+	 */
+	private static function normalizeTimeout(string $value): string {
+		$value = trim($value);
+
+		if (!preg_match('/^([1-9][0-9]*)(s|m)?$/', $value, $match)) {
+			throw new \RuntimeException(_('Timeout must be a number of seconds, optionally suffixed with s or m.'));
+		}
+
+		$seconds = (int) $match[1] * (($match[2] ?? 's') === 'm' ? 60 : 1);
+
+		if ($seconds < 1 || $seconds > 600) {
+			throw new \RuntimeException(_('Timeout must be between 1s and 600s.'));
+		}
+
+		return $seconds.'s';
+	}
+
 	private static function protocolIndex($value, int $count): int {
 		$index = (int) $value;
 
@@ -331,7 +406,10 @@ final class CHostContext {
 			// plainly has a community configured is how this looked before, and it
 			// sent people looking at the device.
 			'unresolved_macros' => $unresolved,
-			'overridden' => $this->overridden
+			'overridden' => $this->overridden,
+			'bulk' => $this->usesBulk() ? 1 : 0,
+			'max_repetitions' => $this->maxRepetitions(),
+			'timeout' => $this->timeout
 		];
 
 		if ($version == SNMP_V3) {

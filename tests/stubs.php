@@ -56,6 +56,7 @@ define('SNMP_V1', 1);
 define('SNMP_V2C', 2);
 define('SNMP_V3', 3);
 define('SNMP_BULK_ENABLED', 1);
+define('SNMP_BULK_DISABLED', 0);
 define('INTERFACE_TYPE_SNMP', 2);
 define('INTERFACE_USE_IP', 1);
 define('INTERFACE_PRIMARY', 1);

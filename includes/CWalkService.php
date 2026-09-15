@@ -124,7 +124,12 @@ final class CWalkService {
 				}
 
 				return new CEngineLocal($host,
-					(int) self::config('local_timeout', 3),
+					// One number in the console rather than one per engine: a timeout
+					// typed while chasing a slow device should mean the same thing
+					// whichever engine the walk ends up on.
+					$host->timeout !== null
+						? (int) rtrim($host->timeout, 's')
+						: (int) self::config('local_timeout', 3),
 					(int) self::config('local_retries', 2)
 				);
 

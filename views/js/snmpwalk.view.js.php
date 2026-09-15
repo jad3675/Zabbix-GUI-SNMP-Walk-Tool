@@ -6,7 +6,7 @@
 window.snmpwalk_console = new class {
 
 	init(options) {
-		console.info('SNMP walk module build 1.6.1');
+		console.info('SNMP walk module build 1.7.0');
 		this.options = options;
 		this.rows = [];
 		this.token = null;
@@ -74,6 +74,14 @@ window.snmpwalk_console = new class {
 				this.#loadContext(this.hostid);
 			}
 		});
+
+		for (const id of ['snmpwalk-bulk', 'snmpwalk-max-repetitions', 'snmpwalk-item-timeout']) {
+			document.getElementById(id).addEventListener('change', () => {
+				if (this.hostid) {
+					this.#loadContext(this.hostid);
+				}
+			});
+		}
 
 		document.getElementById('snmpwalk-cred-version')
 			.addEventListener('change', () => this.#renderCredentialFields());
@@ -211,6 +219,53 @@ window.snmpwalk_console = new class {
 	}
 
 	/**
+	 * Transport settings to post. Empty fields are omitted rather than sent blank, so
+	 * the controller can tell "leave the interface alone" from "use this value".
+	 */
+	#transport() {
+		const fields = {};
+		const bulk = document.getElementById('snmpwalk-bulk').value;
+		const repetitions = document.getElementById('snmpwalk-max-repetitions').value.trim();
+		const timeout = document.getElementById('snmpwalk-item-timeout').value.trim();
+
+		if (bulk !== '') {
+			fields.bulk = bulk;
+		}
+
+		if (repetitions !== '') {
+			fields.max_repetitions = repetitions;
+		}
+
+		if (timeout !== '') {
+			fields.item_timeout = timeout;
+		}
+
+		return fields;
+	}
+
+	/**
+	 * What this walk will actually ask for, which is the interface's settings unless
+	 * something above changed them. Worth stating plainly: combined requests being off
+	 * is the usual reason a large walk times out, and nothing in the console mentioned
+	 * it before.
+	 */
+	#renderTransport(host) {
+		const note = document.getElementById('snmpwalk-transport-note');
+		const parts = [];
+
+		parts.push(host.bulk
+			? <?= json_encode(_('Combined requests on')) ?>
+			: <?= json_encode(_('Combined requests OFF: one round trip per value, which is the usual cause of a timeout on a large walk')) ?>);
+		parts.push(<?= json_encode(_('max repetitions ')) ?> + host.max_repetitions);
+
+		if (host.timeout) {
+			parts.push(<?= json_encode(_('timeout ')) ?> + host.timeout);
+		}
+
+		note.textContent = parts.join(' · ');
+	}
+
+	/**
 	 * Wipe the typed credentials. Called when the host changes, because credentials
 	 * carried silently from one device to the next is how you lock an account out.
 	 */
@@ -278,13 +333,15 @@ window.snmpwalk_console = new class {
 			interfaces.disabled = true;
 			credentials.textContent = '';
 			note.textContent = '';
+			document.getElementById('snmpwalk-transport-note').textContent = '';
 			return;
 		}
 
 		try {
 			const data = await this.#post('snmpwalk.context', {
 				hostid,
-				credentials: document.getElementById('snmpwalk-cred-override').checked ? 1 : 0
+				credentials: document.getElementById('snmpwalk-cred-override').checked ? 1 : 0,
+				...this.#transport()
 			});
 
 			interfaces.disabled = false;
@@ -341,6 +398,8 @@ window.snmpwalk_console = new class {
 
 				this.#renderCredentialFields();
 			}
+
+			this.#renderTransport(host);
 
 			this.engines = data.engines;
 			this.writable = host.writable;
@@ -439,7 +498,8 @@ window.snmpwalk_console = new class {
 					engine: document.getElementById('snmpwalk-engine').value,
 					cursor,
 					token: this.token,
-					...this.#credentials()
+					...this.#credentials(),
+					...this.#transport()
 				});
 
 				this.token = data.token;

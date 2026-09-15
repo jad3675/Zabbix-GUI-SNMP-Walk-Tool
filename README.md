@@ -199,6 +199,28 @@ large walk is noticeably slower than a bulk walk would be. On a LAN it does not 
 resolution and SNMPv3 handling with no new credential path and no new firewall hole.
 It returns the whole subtree in one response, so there is no progress bar.
 
+### Transport tuning
+
+The *Transport* row overrides combined requests, max repetitions and the item timeout
+for one walk, without touching host configuration. All three normally come from the SNMP
+interface and the global timeout setting, which means tuning them used to mean editing a
+customer's interface, walking, and editing it back.
+
+The console states what the walk will use, and says so loudly when combined requests are
+off, because that is the usual reason a large walk dies with `only partial data received
+... timed out`. With them off the poller makes one round trip per value; with them on it
+asks for `max_repetitions` values per exchange.
+
+The timeout bounds one SNMP exchange and its retry, not the walk as a whole. That is why
+the failure names a single OID: it is where one request went unanswered, not where a
+deadline for the subtree expired. Raising it is the most direct fix for a slow agent.
+Max repetitions is worth trying in both directions: higher cuts round trips on a healthy
+device, lower can help one whose agent cannot keep up with a large bulk request, and very
+high values risk fragmentation on a small MTU.
+
+These reach both the server and frontend engines. The script engine takes its snmpwalk
+options from the wrapper on the poller, so it ignores them and says so in the walk notices.
+
 `script` is what to standardise on for proxied customer estates. It is also the only
 engine that works against a host whose credentials are held in Secret text or Vault
 macros, because Zabbix server expands macros in a global script's command itself. See

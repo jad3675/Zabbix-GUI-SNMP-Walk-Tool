@@ -281,3 +281,15 @@
 	padding-left: 10px;
 	border-left: 2px solid rgba(128, 128, 128, 0.35);
 }
+
+/* Transport controls sit on one line: three small fields, not a stacked block. */
+.snmpwalk-transport {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: flex-end;
+}
+
+.snmpwalk-transport .snmpwalk-cred-row {
+	margin-bottom: 0;
+}

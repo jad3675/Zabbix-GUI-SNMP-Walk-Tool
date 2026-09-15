@@ -474,6 +474,47 @@ check('an unresolved macro survives scrubbing',
 		->scrub('cannot read {$SNMP_COMMUNITY}'),
 	'cannot read {$SNMP_COMMUNITY}');
 
+// ------------------------------------------------- CHostContext transport override
+
+$transport = context(['version' => SNMP_V2C, 'community' => 'public',
+	'bulk' => SNMP_BULK_DISABLED, 'max_repetitions' => 10]);
+$transport->applyTransport(['bulk' => '1', 'max_repetitions' => '50', 'timeout' => '15']);
+
+check('bulk can be turned on', $transport->usesBulk(), true);
+check('max repetitions is applied', $transport->maxRepetitions(), 50);
+check('bare seconds gain a suffix', $transport->timeout, '15s');
+check('transport override is flagged', $transport->transport_overridden, true);
+
+$untouched = context(['version' => SNMP_V2C, 'community' => 'public',
+	'bulk' => SNMP_BULK_DISABLED, 'max_repetitions' => 10]);
+$untouched->applyTransport(['bulk' => '', 'max_repetitions' => '', 'timeout' => '']);
+
+check('empty fields leave the interface alone', $untouched->usesBulk(), false);
+check('empty fields leave repetitions alone', $untouched->maxRepetitions(), 10);
+check('empty fields set no timeout', $untouched->timeout, null);
+check('empty fields are not an override', $untouched->transport_overridden, false);
+
+check('bulk can be turned off',
+	(function () { $h = context(['version' => SNMP_V2C, 'bulk' => SNMP_BULK_ENABLED]);
+		$h->applyTransport(['bulk' => '0']); return $h->usesBulk(); })(), false);
+
+check('minutes are converted',
+	(function () { $h = context(['version' => SNMP_V2C]);
+		$h->applyTransport(['timeout' => '2m']); return $h->timeout; })(), '120s');
+
+check('zero repetitions is refused',
+	refused(fn() => context(['version' => SNMP_V2C])->applyTransport(['max_repetitions' => '0'])),
+	'refused');
+check('absurd repetitions is refused',
+	refused(fn() => context(['version' => SNMP_V2C])->applyTransport(['max_repetitions' => '5000'])),
+	'refused');
+check('a timeout over the server ceiling is refused',
+	refused(fn() => context(['version' => SNMP_V2C])->applyTransport(['timeout' => '601'])), 'refused');
+check('a non-numeric timeout is refused',
+	refused(fn() => context(['version' => SNMP_V2C])->applyTransport(['timeout' => 'fast'])), 'refused');
+check('a timeout in hours is refused',
+	refused(fn() => context(['version' => SNMP_V2C])->applyTransport(['timeout' => '1h'])), 'refused');
+
 // ------------------------------------------------------------- source checks
 
 /**

@@ -126,7 +126,7 @@ final class CEngineServer implements CEngine {
 				'value_type' => ITEM_VALUE_TYPE_TEXT,
 				'flags' => ZBX_FLAG_DISCOVERY_NORMAL,
 				'snmp_oid' => 'walk['.$root.']',
-				'timeout' => self::itemTimeout()
+				'timeout' => $this->host->timeout ?? self::itemTimeout()
 			],
 			'host' => [
 				'host' => $this->host->host,
@@ -215,6 +215,11 @@ final class CEngineServer implements CEngine {
 	 * with "Unsupported timeout value" if it is missing or not a time unit. Take the
 	 * global SNMP agent timeout so a walk waits exactly as long as ordinary collection
 	 * against the same device would, rather than inventing a number.
+	 *
+	 * This is the value the console overrides. It bounds one SNMP exchange and its
+	 * retry, not the walk as a whole, which is why "only partial data received ...
+	 * timed out" names a single OID: that is where one GETBULK went unanswered, not
+	 * where a deadline for the whole subtree expired.
 	 */
 	private static function itemTimeout(): string {
 		if (defined('CSettingsHelper::TIMEOUT_SNMP_AGENT')) {

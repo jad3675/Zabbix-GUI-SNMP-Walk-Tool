@@ -23,7 +23,12 @@ class WalkContext extends CWalkAction {
 			// Whether the console intends to supply credentials, not what they are.
 			// Enough to answer which engines could use them, without the values
 			// leaving the browser until there is a walk to run.
-			'credentials' => 'in 0,1'
+			'credentials' => 'in 0,1',
+			// Echoed back through redacted() so the console can show what the walk
+			// will actually use rather than what the interface says.
+			'bulk' => 'in 0,1',
+			'max_repetitions' => 'string',
+			'item_timeout' => 'string'
 		]);
 	}
 
@@ -32,6 +37,11 @@ class WalkContext extends CWalkAction {
 			$hostid = $this->getInput('hostid');
 			$context = CHostContext::load($hostid, $this->getInput('interfaceid', ''));
 			$context->overridden = (int) $this->getInput('credentials', 0) === 1;
+			$context->applyTransport([
+				'bulk' => $this->getInput('bulk', ''),
+				'max_repetitions' => $this->getInput('max_repetitions', ''),
+				'timeout' => $this->getInput('item_timeout', '')
+			]);
 
 			$this->json([
 				'host' => $context->redacted(),

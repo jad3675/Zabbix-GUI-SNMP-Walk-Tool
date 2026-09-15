@@ -110,6 +110,40 @@ $filter = (new CFormGrid())
 				->addClass(ZBX_STYLE_GREY)
 		])
 	])
+	->addItem([
+		new CLabel(_('Transport')),
+		new CFormField([
+			(new CDiv([
+				(new CDiv([
+					new CLabel(_('Combined requests'), 'snmpwalk-bulk'),
+					(new CTag('select', true))
+						->setId('snmpwalk-bulk')
+						->addClass('focusable')
+						->addItem((new CTag('option', true, _('Interface default')))
+							->setAttribute('value', ''))
+						->addItem((new CTag('option', true, _('On')))
+							->setAttribute('value', '1'))
+						->addItem((new CTag('option', true, _('Off')))
+							->setAttribute('value', '0'))
+				]))->addClass('snmpwalk-cred-row'),
+				(new CDiv([
+					new CLabel(_('Max repetitions'), 'snmpwalk-max-repetitions'),
+					(new CTextBox('max_repetitions'))
+						->setId('snmpwalk-max-repetitions')
+						->setWidth(ZBX_TEXTAREA_TINY_WIDTH)
+						->setAttribute('placeholder', _('interface'))
+				]))->addClass('snmpwalk-cred-row'),
+				(new CDiv([
+					new CLabel(_('Timeout'), 'snmpwalk-item-timeout'),
+					(new CTextBox('item_timeout'))
+						->setId('snmpwalk-item-timeout')
+						->setWidth(ZBX_TEXTAREA_TINY_WIDTH)
+						->setAttribute('placeholder', _('global'))
+				]))->addClass('snmpwalk-cred-row')
+			]))->addClass('snmpwalk-transport'),
+			(new CDiv())->setId('snmpwalk-transport-note')->addClass(ZBX_STYLE_GREY)
+		])
+	])
 	->addItem(
 		(new CFormField(
 			(new CDiv([

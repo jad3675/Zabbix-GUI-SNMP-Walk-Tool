@@ -40,7 +40,12 @@ class WalkRun extends CWalkAction {
 			'cred_authpassphrase' => 'string',
 			'cred_privprotocol' => 'int32',
 			'cred_privpassphrase' => 'string',
-			'cred_contextname' => 'string'
+			'cred_contextname' => 'string',
+			// Transport tuning for this walk only. Absent fields leave the
+			// interface's own settings alone.
+			'bulk' => 'in 0,1',
+			'max_repetitions' => 'string',
+			'item_timeout' => 'string'
 		]);
 	}
 
@@ -95,6 +100,12 @@ class WalkRun extends CWalkAction {
 				]);
 			}
 
+			$context->applyTransport([
+				'bulk' => $this->getInput('bulk', ''),
+				'max_repetitions' => $this->getInput('max_repetitions', ''),
+				'timeout' => $this->getInput('item_timeout', '')
+			]);
+
 			$engine = CWalkService::engine($context, $this->getInput('engine', 'auto'));
 
 			$cursor = $this->getInput('cursor', '');
@@ -118,7 +129,10 @@ class WalkRun extends CWalkAction {
 					// The fact, not the value. Six months later, "these numbers came
 					// from credentials somebody typed" is worth knowing about a
 					// snapshot; the credentials themselves are not written anywhere.
-					'credentials' => $context->overridden ? 'supplied' : 'interface'
+					'credentials' => $context->overridden ? 'supplied' : 'interface',
+					'bulk' => $context->usesBulk() ? 1 : 0,
+					'max_repetitions' => $context->maxRepetitions(),
+					'timeout' => $context->timeout
 				]);
 
 				$this->log('walk', [
@@ -131,6 +145,13 @@ class WalkRun extends CWalkAction {
 
 			$limit = CWalkService::chunkSize();
 			$result = $engine->walk($root, $cursor, $limit);
+
+			// The script engine's snmpwalk carries its own -t, -r and bulk behaviour in
+			// the wrapper on the poller, so these settings cannot reach it. Saying so
+			// beats letting someone conclude the tuning did nothing.
+			if ($context->transport_overridden && $engine->name() === 'script') {
+				$result['notices'][] = _('The script engine uses the snmpwalk options in the wrapper on the poller, so the transport settings chosen here were not applied.');
+			}
 
 			$mib->annotate($result['varbinds']);
 			$mib->persist();
